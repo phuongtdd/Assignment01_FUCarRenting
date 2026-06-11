@@ -82,9 +82,14 @@ public class RentingService {
         transaction.setTotalPrice(totalPrice);
         RentingTransaction saved = transactionRepository.save(transaction);
 
-        // Set the composite key fields for each detail
+        // Set the composite key fields for each detail and update car status
         for (RentingDetail d : saved.getDetails()) {
             d.setRentingTransactionId(saved.getRentingTransactionId());
+            try {
+                carClient.updateCarStatus(d.getCarId(), "0");
+            } catch (Exception e) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to update car status: " + d.getCarId());
+            }
         }
 
         return toResponse(saved);
