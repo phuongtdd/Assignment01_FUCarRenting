@@ -5,7 +5,9 @@ import com.fucar.renting.client.CustomerClient;
 import com.fucar.renting.dto.CarResponse;
 import com.fucar.renting.dto.CustomerResponse;
 import com.fucar.renting.dto.RentingDetailRequest;
+import com.fucar.renting.dto.RentingDetailResponse;
 import com.fucar.renting.dto.RentingRequest;
+import com.fucar.renting.entity.RentingDetail;
 import com.fucar.renting.entity.RentingTransaction;
 import com.fucar.renting.repository.RentingDetailRepository;
 import com.fucar.renting.repository.RentingTransactionRepository;
@@ -133,8 +135,51 @@ class RentingServiceApplicationTests {
 
         // Verify that transaction is never saved
         verify(transactionRepository, never()).save(any(RentingTransaction.class));
-        
+
         // Verify that NO car status is updated
         verify(carClient, never()).updateCarStatus(anyInt(), anyString());
+    }
+
+    @Test
+    void testGetReport_Success() {
+        // Arrange
+        LocalDate start = LocalDate.now();
+        LocalDate end = LocalDate.now().plusDays(5);
+
+        RentingTransaction tx1 = new RentingTransaction();
+        tx1.setTotalPrice(BigDecimal.valueOf(500));
+
+        RentingTransaction tx2 = new RentingTransaction();
+        tx2.setTotalPrice(BigDecimal.valueOf(1000));
+
+        RentingDetail rd1 = new RentingDetail();
+        rd1.setCarId(1);
+        rd1.setStartDate(start);
+        rd1.setEndDate(end);
+        rd1.setPrice(BigDecimal.valueOf(500));
+        rd1.setTransaction(tx1);
+
+        RentingDetail rd2 = new RentingDetail();
+        rd2.setCarId(2);
+        rd2.setStartDate(start);
+        rd2.setEndDate(end);
+        rd2.setPrice(BigDecimal.valueOf(1000));
+        rd2.setTransaction(tx2);
+
+        // Mock repository returning data sorted by totalPrice DESC (tx2 then tx1)
+        when(detailRepository.findByDateRangeOrderByTotalPriceDesc(start, end))
+                .thenReturn(List.of(rd2, rd1));
+
+        // Act
+        List<RentingDetailResponse> report = rentingService.getReport(start, end);
+
+        // Assert
+        assertEquals(2, report.size());
+        assertEquals(2, report.get(0).getCarId());
+        assertEquals(BigDecimal.valueOf(1000), report.get(0).getPrice());
+        assertEquals(1, report.get(1).getCarId());
+        assertEquals(BigDecimal.valueOf(500), report.get(1).getPrice());
+
+        verify(detailRepository, times(1)).findByDateRangeOrderByTotalPriceDesc(start, end);
     }
 }
