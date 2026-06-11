@@ -1,0 +1,94 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.3
+    container_name: fucar-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: fucar
+      MYSQL_PASSWORD: fucar123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  customer-service:
+    build:
+      context: ./customer-service
+      dockerfile: Dockerfile
+    container_name: fucar-customer-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/customer_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: fucar
+      SPRING_DATASOURCE_PASSWORD: fucar123
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+  car-service:
+    build:
+      context: ./car-service
+      dockerfile: Dockerfile
+    container_name: fucar-car-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/car_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: fucar
+      SPRING_DATASOURCE_PASSWORD: fucar123
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+  renting-service:
+    build:
+      context: ./renting-service
+      dockerfile: Dockerfile
+    container_name: fucar-renting-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/renting_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: fucar
+      SPRING_DATASOURCE_PASSWORD: fucar123
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      CUSTOMER_SERVICE_URL: http://customer-service:8081
+      CAR_SERVICE_URL: http://car-service:8082
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: fucar-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - customer-service
+      - car-service
+      - renting-service
+    environment:
+      APP_SERVICE_CUSTOMER: http://customer-service:8081
+      APP_SERVICE_CAR: http://car-service:8082
+      APP_SERVICE_RENTING: http://renting-service:8083
+
+volumes:
+  mysql_data:
